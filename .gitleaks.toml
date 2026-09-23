@@ -1,0 +1,8 @@
+# Scan source, docs, editor config, .env, and built frontend assets with upstream rules.
+# Runtime data and external dependencies are deliberately out of repository-scan scope.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Runtime data, external dependencies, and private backup/secret directories"
+paths = ['''(^|/)(node_modules|\.data|\.git|\.secrets|secrets|backups|playwright-report|test-results)/''']

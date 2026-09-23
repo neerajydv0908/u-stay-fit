@@ -1,0 +1,90 @@
+# New installations only. Read docs/security-hardening.md before upgrading an existing volume.
+x-database: &database
+  NODE_ENV: production
+  DATABASE_SSL: "false"
+  DATABASE_ALLOW_INSECURE_PRIVATE: "true"
+services:
+  db:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: u_stay_fit
+      POSTGRES_USER: usf_admin
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_admin_password
+    secrets: [db_admin_password, db_migrator_password, db_app_password, db_reader_password]
+    volumes:
+      - production_postgres:/var/lib/postgresql/data
+      - ./scripts/deploy/init-roles.sh:/docker-entrypoint-initdb.d/01-roles.sh:ro
+    networks: [database]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U usf_admin -d u_stay_fit"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+  migrate:
+    build: .
+    command: ["node", "server/migrate.js"]
+    environment:
+      <<: *database
+      DATABASE_URL: postgres://usf_migrator@db:5432/u_stay_fit
+      DATABASE_PASSWORD_FILE: /run/secrets/db_migrator_password
+      DEPLOY_ROLE_GRANTS: "true"
+    secrets: [db_migrator_password]
+    networks: [database]
+    depends_on:
+      db: { condition: service_healthy }
+  app:
+    build: .
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    environment:
+      <<: *database
+      PORT: 3001
+      APP_ORIGIN: https://${SITE_DOMAIN:?Set SITE_DOMAIN without https://}
+      DATABASE_URL: postgres://usf_app@db:5432/u_stay_fit
+      DATABASE_PASSWORD_FILE: /run/secrets/db_app_password
+      APP_SECRET_FILE: /run/secrets/app_secret
+      APP_SECRET_PREVIOUS: ${APP_SECRET_PREVIOUS:-}
+      EMAIL_FROM: ${EMAIL_FROM:?Set EMAIL_FROM}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      SMTP_URL: ${SMTP_URL:-}
+      SECURITY_ALERT_EMAIL: ${SECURITY_ALERT_EMAIL:-}
+      TRUST_PROXY: ${TRUST_PROXY:-1}
+      PASSWORD_BREACH_CHECK: "true"
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      FACEBOOK_CLIENT_ID: ${FACEBOOK_CLIENT_ID:-}
+      FACEBOOK_CLIENT_SECRET: ${FACEBOOK_CLIENT_SECRET:-}
+      FACEBOOK_API_VERSION: ${FACEBOOK_API_VERSION:-v23.0}
+    secrets: [db_app_password, app_secret]
+    networks: [database, web]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+  proxy:
+    image: caddy:2
+    restart: unless-stopped
+    environment:
+      SITE_DOMAIN: ${SITE_DOMAIN:?Set SITE_DOMAIN}
+    ports: ["80:80", "443:443", "443:443/udp"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [web]
+    depends_on: [app]
+networks:
+  database: { internal: true }
+  web: {}
+volumes:
+  production_postgres:
+  caddy_data:
+  caddy_config:
+secrets:
+  db_admin_password: { file: ./.secrets/db_admin_password }
+  db_migrator_password: { file: ./.secrets/db_migrator_password }
+  db_app_password: { file: ./.secrets/db_app_password }
+  db_reader_password: { file: ./.secrets/db_reader_password }
+  app_secret: { file: ./.secrets/app_secret }

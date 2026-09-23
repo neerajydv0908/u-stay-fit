@@ -1,0 +1,37 @@
+name: Check U Stay Fit
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - name: Test restricted roles and API security on native PostgreSQL 17
+        run: npm run test:postgres
+      - run: npm audit --audit-level=low
+      - run: npm run build
+      - name: Scan repository history and built files for secrets (redacted)
+        shell: bash
+        run: |
+          set -euo pipefail
+          scan_dir="${RUNNER_TEMP}/usf-gitleaks"
+          mkdir -p "$scan_dir"
+          curl --fail --location --silent --show-error \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz \
+            --output "$scan_dir/archive.tar.gz"
+          printf '%s  %s\n' '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb' "$scan_dir/archive.tar.gz" | sha256sum --check -
+          tar -xzf "$scan_dir/archive.tar.gz" -C "$scan_dir" gitleaks
+          "$scan_dir/gitleaks" git . --config .gitleaks.toml --redact=100 --no-banner --no-color
+          "$scan_dir/gitleaks" dir . --config .gitleaks.toml --redact=100 --no-banner --no-color
