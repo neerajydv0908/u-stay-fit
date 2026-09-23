@@ -1,4 +1,5 @@
 import { readFileSync, statSync } from 'node:fs';
+import { parse as parseConnectionString } from 'pg-connection-string';
 export function secretValue(name, env = process.env) {
   if (env[name] && env[`${name}_FILE`])
     throw new Error(`Set only ${name} or ${name}_FILE, not both.`);
@@ -35,9 +36,14 @@ export function databaseConfig(
   const password = secretValue('DATABASE_PASSWORD', env);
   if (password && parsed.password)
     throw new Error('Do not supply both a URL password and DATABASE_PASSWORD_FILE.');
+  // pg re-parses a `connectionString` over every other field, and a URL without a password
+  // parses to password '' — which then replaced the mounted secret and the server saw no
+  // password at all. Hand pg the parsed fields instead, so the secret is what it sends.
+  const { password: urlPassword, ...connection } = parseConnectionString(url);
+  const effective = password || urlPassword;
   return {
-    connectionString: url,
-    ...(password ? { password } : {}),
+    ...connection,
+    ...(effective ? { password: effective } : {}),
     ssl:
       ssl === 'true'
         ? {

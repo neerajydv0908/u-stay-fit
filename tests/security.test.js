@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { scryptSync } from 'node:crypto';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import pg from 'pg';
 import { generateKeyPair, exportJWK, createLocalJWKSet, SignJWT } from 'jose';
 import { hashPassword, verifyPassword, needsPasswordUpgrade } from '../server/security.js';
 import { databaseConfig } from '../server/config.js';
@@ -60,6 +64,48 @@ test('F7: URL SSL settings cannot downgrade explicitly configured certificate ve
     }).ssl,
     false,
   );
+});
+test('DATABASE_PASSWORD_FILE is the password pg sends, even though the URL carries none', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'usf-db-secret-'));
+  const file = join(dir, 'db_app_password');
+  writeFileSync(file, 'mounted-secret\n', { mode: 0o600 });
+  try {
+    const config = databaseConfig('postgres://usf_app@db:5432/u_stay_fit', {
+      env: {
+        DATABASE_SSL: 'false',
+        DATABASE_ALLOW_INSECURE_PRIVATE: 'true',
+        DATABASE_PASSWORD_FILE: file,
+      },
+      production: true,
+    });
+    assert.equal(config.password, 'mounted-secret');
+    assert.equal(config.connectionString, undefined);
+    // The regression: pg re-parsed the URL over the explicit field, so a URL without a
+    // password left the client with none and the first deployment failed to connect.
+    const client = new pg.Client(config);
+    assert.equal(client.connectionParameters.password, 'mounted-secret');
+    assert.equal(client.connectionParameters.user, 'usf_app');
+    assert.equal(client.connectionParameters.host, 'db');
+    assert.equal(client.connectionParameters.port, 5432);
+    assert.equal(client.connectionParameters.database, 'u_stay_fit');
+    assert.equal(client.connectionParameters.ssl, false);
+    // Local setups keep an inline URL password; both at once are still refused.
+    const inline = databaseConfig('postgres://app:inline@db/planner', {
+      env: { DATABASE_SSL: 'false' },
+      production: false,
+    });
+    assert.equal(new pg.Client(inline).connectionParameters.password, 'inline');
+    assert.throws(
+      () =>
+        databaseConfig('postgres://app:inline@db/planner', {
+          env: { DATABASE_SSL: 'false', DATABASE_PASSWORD_FILE: file },
+          production: false,
+        }),
+      /both a URL password/,
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 const env = {
   GOOGLE_CLIENT_ID: 'test-client',
