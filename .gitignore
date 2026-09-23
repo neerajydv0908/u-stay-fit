@@ -1,0 +1,23 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+.data/
+coverage/
+playwright-report/
+test-results/
+.DS_Store
+*.log
+.sites-runtime/
+backups/
+# Editor and OS files
+.idea/
+.vscode/
+# Personal notes and learning material kept out of the repository
+notes/
+
+.secrets/
+secrets/
+*.dump
+*.dump.gz.gpg
