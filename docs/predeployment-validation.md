@@ -36,6 +36,7 @@ Results:
 
 - **53 of 53 tests passed** in the regular suite. This includes ten new production-boundary tests in `tests/production-boundaries.test.js`, plus the existing authentication, privacy, calculation, and security regressions.
 - **23 of 23 API/security tests also passed on native PostgreSQL 17**, together with separate restricted-role, startup-guard, and competing-connection lock checks. These 23 overlap the regular suite; they are another database environment, not 23 additional unique cases.
+- The runner connects the migration job the way the Compose deployment does — a URL without a password plus `DATABASE_PASSWORD_FILE` — after the first real deployment showed that `pg` dropped a mounted password when it was passed next to a `connectionString` (fixed in `server/config.js`, with a regression test in `tests/security.test.js`).
 - **Production frontend build passed.** A build verifies compilation; it does not certify security.
 - **Both dependency audits returned zero known vulnerabilities.** The audit metadata reports 248 dependency nodes in the lockfile; do not interpret the production-only command's shared dependency-count metadata as 248 production packages.
 - **Gitleaks 8.30.1**, downloaded from its official release and checked against the release SHA-256 checksum, performed a redacted secret scan. Its configuration is `.gitleaks.toml`. No live credential values were printed or copied into this report.

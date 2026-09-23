@@ -1,6 +1,6 @@
 // A real PostgreSQL 17 process, temporary directory, random credentials, loopback only.
 // No Docker, system accounts, real application database, or administrator privileges needed.
-import { mkdtemp, readFile, symlink, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile, symlink, rm } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { resolve, dirname, relative, join } from 'node:path';
@@ -72,7 +72,16 @@ try {
     'REVOKE ALL ON DATABASE u_stay_fit FROM PUBLIC; GRANT CONNECT ON DATABASE u_stay_fit TO usf_migrator,usf_app,usf_reader; REVOKE CREATE ON SCHEMA public FROM PUBLIC; GRANT USAGE,CREATE ON SCHEMA public TO usf_migrator',
   );
   const { createDatabase } = await import('../server/db.js');
-  const migrator = await createDatabase({ url: url('usf_migrator'), runMigrations: true });
+  // Connect the migration job the way the Compose deployment does: a URL without a
+  // password plus DATABASE_PASSWORD_FILE, so the mounted-secret path is what gets tested.
+  const passwordFile = join(temp, 'db_migrator_password');
+  await writeFile(passwordFile, password, { mode: 0o600 });
+  process.env.DATABASE_PASSWORD_FILE = passwordFile;
+  const migrator = await createDatabase({
+    url: `postgres://usf_migrator@127.0.0.1:${port}/u_stay_fit`,
+    runMigrations: true,
+  });
+  delete process.env.DATABASE_PASSWORD_FILE;
   await migrator.exec(
     'GRANT USAGE ON SCHEMA public TO usf_app,usf_reader; GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO usf_app; REVOKE ALL ON schema_migrations FROM usf_app; GRANT SELECT ON schema_migrations TO usf_app; GRANT SELECT ON operator_accounts TO usf_reader',
   );
@@ -100,7 +109,9 @@ try {
   await assert.rejects(() => reader.query('SELECT * FROM users'), /permission denied/);
   await assert.rejects(() => reader.query('SELECT * FROM entries'), /permission denied/);
   await reader.end();
-  console.log('PostgreSQL 17: restricted runtime/read-only roles and startup guards passed.');
+  console.log(
+    'PostgreSQL 17: mounted password file, restricted runtime/read-only roles and startup guards passed.',
+  );
   // Prove locking under contention with two different client connections.
   const a = await admin.query(
     "INSERT INTO users(id,name,username) VALUES('00000000-0000-4000-8000-000000000001','Test','locktest') RETURNING id",
