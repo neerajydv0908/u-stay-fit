@@ -131,6 +131,11 @@ test('debug, staging, admin, source, dotfiles and database files are not served 
     assert.doesNotMatch(r.text, /password_hash|DATABASE_URL|APP_SECRET|<script/);
   }
 });
+test('the emailed account-deletion link opens its page in production', async () => {
+  const r = await request('/delete-account?token=an-emailed-token-value-1234');
+  assert.equal(r.status, 200);
+  assert.match(r.headers.get('content-type'), /text\/html/);
+});
 test('all private API operations require a session, including account controls and export', async () => {
   const routes = [
     ['GET', '/api/me'],
@@ -149,7 +154,6 @@ test('all private API operations require a session, including account controls a
     ['POST', '/api/account/totp/disable'],
     ['POST', '/api/account/totp/recovery-codes'],
     ['POST', '/api/account/deletion-confirmation'],
-    ['POST', '/api/account/confirm-deletion'],
     ['POST', '/api/auth/logout-all'],
   ];
   for (const [method, path] of routes)

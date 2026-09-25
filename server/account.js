@@ -1,11 +1,11 @@
 import QRCode from 'qrcode';
 import {
   accountDetailsSchema,
-  tokenOnlySchema,
   changePasswordSchema,
   totpCodeSchema,
   passwordOnlySchema,
   deleteAccountSchema,
+  deleteByEmailSchema,
 } from '../shared/schemas.js';
 import { digest, hashPassword, verifyPassword, publicUser } from './security.js';
 import { messages } from './email.js';
@@ -34,6 +34,7 @@ export function registerAccountRoutes(app, ctx) {
     cookieOptions,
     SESSION_COOKIE,
     requireUser,
+    authLimit,
   } = ctx;
   // The user row lock orders these changes with sign-in, reset, and factor consumption.
   function secured(handler) {
@@ -224,59 +225,63 @@ export function registerAccountRoutes(app, ctx) {
       return { body: { ok: true } };
     }),
   );
+  // Google/Facebook accounts have no password, so deletion is confirmed through their mailbox.
+  // The emailed link used to work only in the exact browser session that asked for it; opened
+  // anywhere else (a phone's mail app, another browser) it showed the sign-in page and could never
+  // succeed. The link now opens a public page that deletes the account once DELETE is typed.
   app.post(
     '/api/account/deletion-confirmation',
     requireUser,
-    secured(async (tx, user, session, req) => {
+    secured(async (tx, user) => {
       if (user.password_hash) return fail(400, 'Confirm using your current password instead.');
       if (!user.email)
         return fail(400, 'Contact the operator to verify ownership of this legacy account.');
       if (!(await mail.allowed(tx, user.email)))
-        return fail(429, 'Wait before requesting another confirmation email.');
-      const value = await state.issueToken(tx, user, 'delete', 300000);
-      await tx.query('UPDATE email_tokens SET session_hash=$2 WHERE token_hash=$1', [
-        digest(value),
-        req.sessionHash,
-      ]);
-      const url = `${origin}/account?confirmation=${value}`;
-      await mail.queue(
-        tx,
-        {
-          to: user.email,
-          subject: 'Confirm your U Stay Fit account deletion request',
-          text: `Confirm that you requested account deletion by opening this link in the same browser where you are signed in:\n${url}\n\nIt expires in five minutes. Opening it does not delete anything. You must confirm again on the account page. If you did not request deletion, ignore this message.`,
-        },
-        user.id,
-      );
+        return fail(429, 'Wait a minute before requesting another deletion email.');
+      const value = await state.issueToken(tx, user, 'delete', 900000);
+      const url = `${origin}/delete-account?token=${value}`;
+      await mail.queue(tx, { to: user.email, ...messages.deletionLink(url) }, user.id);
+      await state.audit(tx, 'deletion_link_sent', user.id);
       return {
         body: {
           ok: true,
+          email: user.email,
           devLink: !production && mailer.mode.startsWith('console') ? url : undefined,
         },
       };
     }),
   );
-  app.post(
-    '/api/account/confirm-deletion',
-    requireUser,
-    secured(async (tx, user, session, req) => {
-      const { token } = tokenOnlySchema.parse(req.body);
-      const consumed = await tx.query(
-        "DELETE FROM email_tokens WHERE token_hash=$1 AND user_id=$2 AND purpose='delete' AND auth_version=$3 AND session_hash=$4 AND expires_at>NOW() RETURNING token_hash",
-        [digest(token), user.id, user.auth_version, req.sessionHash],
-      );
-      if (!consumed.rows.length)
+  // Public on purpose: the emailed token is the proof of ownership. It is single-use, expires in
+  // 15 minutes, dies with any credential change (auth_version), and only covers password-less
+  // accounts. Opening the page is harmless; nothing happens until DELETE is typed and submitted.
+  app.post('/api/account/delete-by-email', authLimit, async (req, res) => {
+    const { token } = deleteByEmailSchema.parse(req.body);
+    const cookie = req.cookies[SESSION_COOKIE];
+    const result = await db.transaction(async (tx) => {
+      const user = await state.tokenUser(tx, token, 'delete');
+      if (!user || user.password_hash)
         return fail(
           400,
-          'This confirmation expired or belongs to another session. Request it again from this browser.',
+          'This deletion link is invalid or has expired. Request a new one from the Account page.',
         );
-      await tx.query('UPDATE sessions SET reauthenticated_at=NOW() WHERE token_hash=$1', [
-        req.sessionHash,
-      ]);
-      await state.audit(tx, 'deletion_identity_confirmed', user.id);
-      return { body: { ok: true } };
-    }),
-  );
+      // Sign this browser out only if it was signed in to the account being deleted.
+      const signedInHere =
+        typeof cookie === 'string' &&
+        (
+          await tx.query('SELECT 1 FROM sessions WHERE token_hash=$1 AND user_id=$2', [
+            digest(cookie),
+            user.id,
+          ])
+        ).rows.length > 0;
+      await state.audit(tx, 'account_deleted', user.id);
+      await tx.query('DELETE FROM users WHERE id=$1', [user.id]);
+      await mail.queue(tx, { to: user.email, ...messages.accountDeleted(user.name, `${origin}/`) });
+      return { deleted: signedInHere, body: { ok: true } };
+    });
+    await mail.finish();
+    if (result.deleted) res.clearCookie(SESSION_COOKIE, cookieOptions);
+    res.status(result.status || 200).json(result.body);
+  });
   app.delete(
     '/api/account',
     requireUser,
@@ -294,12 +299,12 @@ export function registerAccountRoutes(app, ctx) {
       ) {
         return fail(
           403,
-          'Confirm your identity using the email confirmation on this page before deleting. Confirmation lasts five minutes.',
+          'Accounts without a password are deleted through the link we email you. Use “Email me a deletion link” on the Account page.',
         );
       }
       await state.audit(tx, 'account_deleted', user.id);
       await tx.query('DELETE FROM users WHERE id=$1', [user.id]);
-      await mail.queue(tx, { to: user.email, ...messages.accountDeleted() });
+      await mail.queue(tx, { to: user.email, ...messages.accountDeleted(user.name, `${origin}/`) });
       return { deleted: true, body: { ok: true } };
     }),
   );

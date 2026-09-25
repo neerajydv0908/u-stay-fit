@@ -1,5 +1,7 @@
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
+  ArrowLeft,
   ArrowRight,
   ArrowUpRight,
   Check,
@@ -13,8 +15,100 @@ import {
   BadgeCentIcon,
 } from 'lucide-react';
 import { Reveal, Citation, Eyebrow } from '../components/UI';
-import { images } from '../data';
+import { images, myths } from '../data';
 import { useAuth } from '../context';
+
+// The myth cards sit in one row that scrolls sideways (swipe, trackpad, keyboard, or the arrow
+// buttons). The thin bar under the row shows where you are in the list.
+function MythCarousel() {
+  const track = useRef(null);
+  const [view, setView] = useState({ start: true, end: false, left: 0, width: 100 });
+  const measure = () => {
+    const el = track.current;
+    if (!el) return;
+    const { scrollLeft, clientWidth, scrollWidth } = el;
+    setView({
+      start: scrollLeft <= 4,
+      end: scrollLeft + clientWidth >= scrollWidth - 4,
+      left: (scrollLeft / scrollWidth) * 100,
+      width: Math.min(100, (clientWidth / scrollWidth) * 100),
+    });
+  };
+  useEffect(() => {
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, []);
+  // One click moves by as many cards as fit on screen (three on a laptop, one on a phone).
+  // At either end the button stays focusable (aria-disabled, not disabled) so keyboard focus is
+  // not thrown back to the top of the page; it simply does nothing.
+  const move = (direction) => {
+    if (direction < 0 ? view.start : view.end) return;
+    const el = track.current;
+    const card = el.firstElementChild.getBoundingClientRect().width;
+    const gap = parseFloat(getComputedStyle(el).columnGap) || 0;
+    const perView = Math.max(1, Math.floor((el.clientWidth + gap) / (card + gap)));
+    el.scrollBy({
+      left: direction * perView * (card + gap),
+      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+    });
+  };
+  return (
+    <Reveal className="myth-carousel">
+      <div
+        className="myth-track"
+        id="myth-track"
+        ref={track}
+        onScroll={measure}
+        tabIndex={0}
+        role="region"
+        aria-label={`${myths.length} diet myths and the reality behind each. Scroll sideways to see them all.`}
+        data-lenis-prevent-horizontal
+      >
+        {myths.map((item) => (
+          <article className="myth-card" key={item.myth}>
+            <img src={images[item.image]} alt={item.alt} loading="lazy" />
+            <div>
+              <span className="myth-label">THE MYTH</span>
+              <h3>{item.myth}</h3>
+              <span className="truth-label">
+                <Check size={14} />
+                THE REALITY
+              </span>
+              <p>{item.truth}</p>
+              <Citation id={item.source} />
+            </div>
+          </article>
+        ))}
+      </div>
+      <div className="myth-controls">
+        <div className="myth-progress" aria-hidden="true">
+          <span style={{ left: `${view.left}%`, width: `${view.width}%` }} />
+        </div>
+        <button
+          type="button"
+          className="myth-arrow"
+          aria-label="Previous myths"
+          aria-controls="myth-track"
+          aria-disabled={view.start}
+          onClick={() => move(-1)}
+        >
+          <ArrowLeft size={19} />
+        </button>
+        <button
+          type="button"
+          className="myth-arrow"
+          aria-label="Next myths"
+          aria-controls="myth-track"
+          aria-disabled={view.end}
+          onClick={() => move(1)}
+        >
+          <ArrowRight size={19} />
+        </button>
+      </div>
+    </Reveal>
+  );
+}
 
 export default function Home() {
   const { user, profile } = useAuth();
@@ -247,52 +341,13 @@ export default function Home() {
             <Eyebrow>LET’S CLEAR A FEW THINGS UP</Eyebrow>
             <h2>Less noise. More nourishment.</h2>
           </div>
-          <p>A fresh perspective on familiar myths.</p>
+          <p>
+            A fresh perspective on {myths.length} familiar myths.
+            <br />
+            Swipe or use the arrows to see them all.
+          </p>
         </Reveal>
-        <div className="myth-grid">
-          {[
-            {
-              image: images.bread,
-              alt: 'Sliced wholegrain bread on a wooden board',
-              myth: '“Carbs are the enemy.”',
-              truth:
-                'Carbohydrates can belong in a balanced diet. Whole grains add fibre; portion sizes and your overall eating pattern matter.',
-              source: 'myths',
-            },
-            {
-              image: images.avocado,
-              alt: 'Fresh avocados, a source of unsaturated fat',
-              myth: '“Eating fat makes you fat.”',
-              truth:
-                'Your body needs dietary fat. Foods such as nuts and avocado can fit your plan. They are energy-dense, so portions still count.',
-              source: 'myths',
-            },
-            {
-              image: images.female,
-              alt: 'Woman exercising with weights',
-              myth: '“More protein means instant muscle.”',
-              truth:
-                'Protein supports adaptation to resistance training. More is not automatically better, and food cannot replace the training stimulus.',
-              source: 'protein',
-            },
-          ].map((item, i) => (
-            <Reveal key={item.myth} delay={i * 0.08}>
-              <article className="myth-card">
-                <img src={item.image} alt={item.alt} loading="lazy" />
-                <div>
-                  <span className="myth-label">THE MYTH</span>
-                  <h3>{item.myth}</h3>
-                  <span className="truth-label">
-                    <Check size={14} />
-                    THE REALITY
-                  </span>
-                  <p>{item.truth}</p>
-                  <Citation id={item.source} />
-                </div>
-              </article>
-            </Reveal>
-          ))}
-        </div>
+        <MythCarousel />
       </section>
       <section className="container">
         <Reveal className="start-banner">

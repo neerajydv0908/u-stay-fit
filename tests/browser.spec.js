@@ -25,6 +25,48 @@ test('public pages, navigation, and no horizontal overflow', async ({ page }) =>
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 
+test('Contact us reaches the footer in one click from another page; myths scroll sideways', async ({
+  page,
+  isMobile,
+}) => {
+  // Coming from a shorter page used to stop halfway down the home page on the first click.
+  await page.goto('/fat-loss');
+  if (isMobile) await page.getByRole('button', { name: 'Toggle navigation' }).click();
+  await page.getByRole('link', { name: 'Contact us' }).click();
+  await expect
+    .poll(
+      () =>
+        page.evaluate(
+          () => Math.abs(scrollY + innerHeight - document.documentElement.scrollHeight) <= 2,
+        ),
+      { timeout: 5000 },
+    )
+    .toBe(true);
+  await expect(page.getByRole('link', { name: 'Instagram' })).toHaveAttribute(
+    'href',
+    'https://www.instagram.com/ustay_fit_0916/',
+  );
+  await expect(page.getByRole('link', { name: /Twitter \/ X/ })).toHaveAttribute(
+    'href',
+    'https://x.com/Ustayfit0916',
+  );
+
+  await page.goto('/');
+  const track = page.getByRole('region', { name: /diet myths/ });
+  await expect(track.locator('article')).toHaveCount(10);
+  await expect(page.getByRole('button', { name: 'Previous myths' })).toHaveAttribute(
+    'aria-disabled',
+    'true',
+  );
+  await page.getByRole('button', { name: 'Next myths' }).click();
+  await expect.poll(() => track.evaluate((row) => row.scrollLeft)).toBeGreaterThan(0);
+  await expect(page.getByRole('button', { name: 'Previous myths' })).toHaveAttribute(
+    'aria-disabled',
+    'false',
+  );
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
 test('sign up, confirm email, build a plan, log records, secure the account, and recover it', async ({
   page,
 }) => {

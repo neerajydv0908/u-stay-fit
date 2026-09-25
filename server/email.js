@@ -6,6 +6,7 @@
 // reset depend on email actually being delivered.
 import nodemailer from 'nodemailer';
 import { secretValue } from './config.js';
+import { SUPPORT_EMAIL } from '../shared/contact.js';
 
 export function createMailer({
   production = process.env.NODE_ENV === 'production',
@@ -71,6 +72,20 @@ export function createMailer({
   };
 }
 
+// Names are typed by whoever signed up, so an email greets someone by name only when it looks
+// like a name (letters, spaces, hyphens, apostrophes; no links, digits or "@"). Otherwise the
+// caller falls back to "there" or "friend". That keeps anyone from sending a link in our name.
+export function greetingName(name) {
+  const cleaned = String(name || '')
+    .replace(/[\u0000-\u001f\u007f]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const nameLike =
+    /^[\p{L}\p{M}][\p{L}\p{M}'’. -]{0,48}$/u.test(cleaned) &&
+    !/\.\S/.test(cleaned) &&
+    cleaned.split(' ').length <= 4;
+  return nameLike ? cleaned : '';
+}
 // Plain-text messages: they render everywhere and contain nothing an attacker could style.
 export const messages = {
   verify: (link) => ({
@@ -93,8 +108,28 @@ export const messages = {
     subject: 'Your U Stay Fit password was changed',
     text: `The password on your U Stay Fit account was just changed and other sessions were signed out.\n\nIf this was not you, reset your password immediately from the sign-in page.`,
   }),
-  accountDeleted: () => ({
-    subject: 'Your U Stay Fit account was deleted',
-    text: `Your U Stay Fit account, plan, and records have been permanently deleted as requested.\n\nIf this was not you, please contact the operator listed on the privacy page.`,
+  // The goodbye: sent whenever an account is deleted. It also confirms the deletion, so it keeps
+  // the "if this was not you" line.
+  accountDeleted: (name, link) => {
+    const who = greetingName(name);
+    return {
+      subject: who ? `We're sad to see you go, ${who}!` : "We're sad to see you go!",
+      text: `Dear ${who || 'friend'},\n\nWe are so sad to see you go!!\n\nYour U Stay Fit account, your plan, and all of your records have now been permanently deleted, just as you asked.\n\nThank you for letting us be a part of your health journey, even for a little while. Every glass of water you logged and every step you took was yours, and that progress goes with you.\n\nWhenever you are ready to start your health journey again, we will be right here, and we would love to see you again:\n${link}\n\nTake good care of yourself.\n\nWith love,\nThe U Stay Fit team\n\nIf you did not delete this account, please write to us right away at ${SUPPORT_EMAIL}.`,
+    };
+  },
+  // Sent once, when an account becomes real: a confirmed email sign-up or a first Google or
+  // Facebook sign-in.
+  welcome: (name, link) => {
+    const who = greetingName(name);
+    return {
+      subject: who ? `Welcome to U Stay Fit, ${who}!` : 'Welcome to U Stay Fit!',
+      text: `Hey, ${who || 'there'}!!!\n\nWe are so glad you trusted us to be a part of your health journey. Welcome to U Stay Fit!\n\nYour space is ready. Build your personal plan, log your meals, water and movement, and watch your progress grow, one small step at a time:\n${link}\n\nA little something to carry with you:\n"You don't have to be extreme, just consistent. Small steps, repeated every day, become the change you are working for."\n\nThere will be busy days and lazy days, and that is okay. Show up for yourself anyway, even if it is only a glass of water or a ten-minute walk. Those are the days that build the habit.\n\nWe are cheering for you.\n\nWith care,\nThe U Stay Fit team`,
+    };
+  },
+  // Account deletion for Google/Facebook accounts (no password to confirm with). The link itself
+  // proves the person controls the mailbox, so it works on any device, signed in or not.
+  deletionLink: (link) => ({
+    subject: 'Delete your U Stay Fit account',
+    text: `You asked to delete your U Stay Fit account. Open this link to finish:\n${link}\n\nIt works on any phone or computer, even one where you are not signed in, and it expires in 15 minutes. If you asked more than once, use the newest email: each new link replaces the one before. Opening it does not delete anything by itself: you will be asked to type DELETE on that page first.\n\nIf you did not ask for this, ignore this email and your account will stay exactly as it is.`,
   }),
 };

@@ -27,7 +27,7 @@ I built it end to end! The design, the React front end, the Node/Express API, th
 | Data | PostgreSQL in production with three database roles, each holding only the privileges it needs; an embedded PostgreSQL engine (PGlite) for local development; numbered SQL migrations |
 | Security | scrypt password hashing, hashed session tokens with idle and absolute lifetimes, TOTP two-factor implemented from RFC 6238, AES-256-GCM encryption for secrets at rest, database-backed rate limits, strict CSP/HSTS headers, CSRF protection, a pseudonymous security log with alerting |
 | Delivery | Docker (non-root, read-only container) behind Caddy for automatic HTTPS, encrypted backups, and GitHub Actions running the tests, `npm audit` and secret scanning on every push |
-| Testing | 58 API and unit tests (`node --test`), the same suite against native PostgreSQL 17, and Playwright browser journeys on desktop and phone |
+| Testing | 64 API and unit tests (`node --test`), the same suite against native PostgreSQL 17, and Playwright browser journeys on desktop and phone |
 
 The formulas, their limits and their sources are in [docs/health-methodology.md](docs/health-methodology.md). The security design is mapped item by item — what the code does, what the deployment does, and what the operator still has to do — in [docs/security-checklist.md](docs/security-checklist.md).
 
@@ -38,7 +38,7 @@ npm ci
 npm run dev
 ```
 
-Then open http://localhost:5173. Nothing else is needed: development uses an embedded database and prints confirmation links in the terminal instead of sending email. `npm test` runs the API and unit tests and `npm run test:e2e` the browser suite; [docs/testing.md](docs/testing.md) has the details.
+Then open http://localhost:5173. Nothing else is needed: development uses an embedded database and prints confirmation links in the terminal instead of sending email. `npm test` runs the API and unit tests and `npm run test:e2e` the browser suite.
 
 ## Status
 
@@ -50,8 +50,8 @@ U Stay Fit provides general wellness information calculated from the numbers you
 
 ## Contact
 
-Neeraj Yadav — neerajahir018@gmail.com
+Neeraj Yadav — ustayfit0916@gmail.com
 
 ## Licence
 
-The code is released under the [MIT Licence](LICENSE). The photographs come from Unsplash under the [Unsplash License](https://unsplash.com/license); credits are in [docs/assets.md](docs/assets.md).
+The code is released under the [MIT Licence](LICENSE). The photographs come from Unsplash under the [Unsplash License](https://unsplash.com/license).

@@ -654,10 +654,75 @@ footer[id] {
 .knowledge-card .text-link {
   font-size: 0.79rem;
 }
-.myth-grid {
+/* Myths: one row of cards that scrolls from left to right, three visible on a laptop. */
+.myth-track {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-auto-flow: column;
+  grid-auto-columns: calc((100% - 2 * 25px) / 3);
   gap: 25px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  padding: 3px 1px 6px;
+  border-radius: 14px;
+}
+.myth-track::-webkit-scrollbar {
+  display: none;
+}
+.myth-track > .myth-card {
+  scroll-snap-align: start;
+}
+.myth-track:focus-visible {
+  outline: 2px solid #b5677b;
+  outline-offset: 4px;
+}
+.myth-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 22px;
+}
+.myth-progress {
+  position: relative;
+  flex: 1;
+  height: 3px;
+  margin-right: 12px;
+  border-radius: 3px;
+  background: var(--line);
+  overflow: hidden;
+}
+.myth-progress > span {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 3px;
+  background: var(--rose);
+  transition:
+    left 0.15s linear,
+    width 0.15s linear;
+}
+.myth-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  border: 1px solid #ddcfc7;
+  border-radius: 50%;
+  background: #fdfbf7;
+  color: var(--rose);
+  cursor: pointer;
+  transition:
+    background 0.2s,
+    opacity 0.2s;
+}
+.myth-arrow:hover:not([aria-disabled='true']) {
+  background: var(--pink);
+}
+.myth-arrow[aria-disabled='true'] {
+  opacity: 0.35;
+  cursor: default;
 }
 .myth-card {
   height: 100%;
@@ -2727,8 +2792,11 @@ footer {
   }
   .journey-grid,
   .knowledge-grid,
-  .myth-grid {
+  .myth-track {
     gap: 17px;
+  }
+  .myth-track {
+    grid-auto-columns: calc((100% - 17px) / 2);
   }
   .journey-image {
     height: 205px;
@@ -3094,10 +3162,18 @@ footer {
     font-size: 0.75rem;
   }
   .journey-grid,
-  .knowledge-grid,
-  .myth-grid {
+  .knowledge-grid {
     grid-template-columns: 1fr;
     gap: 24px;
+  }
+  /* On a phone one card fills most of the width and the next one peeks in from the right. */
+  .myth-track {
+    grid-auto-columns: 86%;
+    gap: 16px;
+  }
+  .myth-arrow {
+    width: 42px;
+    height: 42px;
   }
   .journey-image {
     height: 290px;

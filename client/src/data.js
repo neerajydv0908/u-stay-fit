@@ -1,15 +1,16 @@
 import localPhotos from './photos.local.js';
+import { SUPPORT_EMAIL } from '../../shared/contact.js';
 
 // Fill these in before a public launch. They appear in the footer and the privacy notice.
 export const operator = {
   name: 'Neeraj Yadav', // the person or organisation operating the service
-  email: 'neerajahir018@gmail.com', // a monitored address for privacy and support requests
-  instagram: '', // full profile URL, or leave empty
-  x: '', // full profile URL, or leave empty
+  email: SUPPORT_EMAIL, // a monitored address for privacy and support requests (shared/contact.js)
+  instagram: 'https://www.instagram.com/ustay_fit_0916/', // full profile URL, or leave empty
+  x: 'https://x.com/Ustayfit0916', // full profile URL, or leave empty
   location: 'Kansas, United States', // country or region whose privacy law applies to the operator
 };
 
-// Source photographs are credited in docs/assets.md. Run `npm run photos:fetch` once to store
+// Source photographs are from Unsplash (IDs below). Run `npm run photos:fetch` once to store
 // copies under client/public/photos; until then the original Unsplash URLs are used.
 export const photoSources = {
   food: ['photo-1512621776951-a57141f2eefd', 1400],
@@ -22,6 +23,14 @@ export const photoSources = {
   femaleGain: ['photo-1649888216899-047093431441', 800],
   maleLoss: ['photo-1637579103895-9ba8218e9aca', 800],
   maleMaintain: ['photo-1630415188521-120ff5adfd02', 800],
+  // One photo per newer myth card (home page), each used only there.
+  mythSkipMeals: ['photo-1531928351158-2f736078e0a1', 700],
+  mythStrength: ['photo-1567598317136-3cd762432241', 700],
+  mythCardio: ['photo-1638183395699-2c0db5b6afbb', 700],
+  mythCrunches: ['photo-1758875569284-c57e79ef75e0', 700],
+  mythRest: ['photo-1677572936823-43a5717c1d7b', 700],
+  mythBulk: ['photo-1648775170273-dcbe48fb12a0', 700],
+  mythShortWorkout: ['photo-1519310572353-9536984a4b0b', 700],
 };
 export const unsplashUrl = (id, width) =>
   `https://images.unsplash.com/${id}?auto=format&fit=crop&w=${width}&q=85`;
@@ -97,7 +106,108 @@ export const sources = {
     name: 'Wang et al. · Composition of fat-free mass',
     url: 'https://pubmed.ncbi.nlm.nih.gov/10232621/',
   },
+  spotReduction: {
+    name: 'Vispute et al. · Ab exercise & belly fat',
+    url: 'https://pubmed.ncbi.nlm.nih.gov/21804427/',
+  },
+  keepMuscle: {
+    name: 'Cava et al. · Keeping muscle during weight loss',
+    url: 'https://pmc.ncbi.nlm.nih.gov/articles/PMC5421125/',
+  },
+  bulking: {
+    name: 'Iraki et al. · Nutrition for muscle-building phases',
+    url: 'https://pubmed.ncbi.nlm.nih.gov/31247944/',
+  },
+  recovery: {
+    name: 'ACSM · Resistance-training progression',
+    url: 'https://pubmed.ncbi.nlm.nih.gov/19204579/',
+  },
 };
+// "Less noise. More nourishment." on the home page: one card per myth, shown in a sideways
+// (left-to-right) scroller. Each `source` is a key of `sources` above and each `image` a key of
+// `photoSources`.
+export const myths = [
+  {
+    image: 'bread',
+    alt: 'Sliced wholegrain bread on a wooden board',
+    myth: '“Carbs are the enemy.”',
+    truth:
+      'Carbohydrates can belong in a balanced diet. Whole grains add fibre; portion sizes and your overall eating pattern matter.',
+    source: 'myths',
+  },
+  {
+    image: 'avocado',
+    alt: 'Fresh avocados, a source of unsaturated fat',
+    myth: '“Eating fat makes you fat.”',
+    truth:
+      'Your body needs dietary fat. Foods such as nuts and avocado can fit your plan. They are energy-dense, so portions still count.',
+    source: 'myths',
+  },
+  {
+    image: 'female',
+    alt: 'Woman exercising with weights',
+    myth: '“More protein means instant muscle.”',
+    truth:
+      'Protein supports adaptation to resistance training. More is not automatically better, and food cannot replace the training stimulus.',
+    source: 'protein',
+  },
+  {
+    image: 'mythSkipMeals',
+    alt: 'An empty plate with a knife and fork arranged into a sad face',
+    myth: '“Skipping meals speeds up fat loss.”',
+    truth:
+      'Skipping meals often leaves you hungrier later, so you may eat more at the next meal. Regular, satisfying meals make a steady plan easier to keep.',
+    source: 'myths',
+  },
+  {
+    image: 'mythStrength',
+    alt: 'Woman walking through a gym carrying a pair of dumbbells',
+    myth: '“Lifting weights will make women bulky.”',
+    truth:
+      'Strength training builds strength and helps you manage your weight. Very large muscles take intense, targeted training and the right genetics, not a few sessions a week.',
+    source: 'myths',
+  },
+  {
+    image: 'mythCardio',
+    alt: 'Woman running on a treadmill',
+    myth: '“Cardio is the only way to lose fat.”',
+    truth:
+      'Fat loss comes from a steady energy deficit, and food choices alone can create one. Adding strength training helps you keep muscle while the fat comes off.',
+    source: 'keepMuscle',
+  },
+  {
+    image: 'mythCrunches',
+    alt: 'Woman doing crunches on a mat while a trainer watches',
+    myth: '“Crunches will burn belly fat.”',
+    truth:
+      'You cannot choose where fat comes off. Ab exercises strengthen your core, but belly fat shrinks with overall fat loss.',
+    source: 'spotReduction',
+  },
+  {
+    image: 'mythRest',
+    alt: 'Man resting on a bench with a bottle of water after training',
+    myth: '“Rest days slow your progress.”',
+    truth:
+      'Muscles adapt while you recover. Planned rest and lighter days between hard sessions are part of a good routine, not a step back.',
+    source: 'recovery',
+  },
+  {
+    image: 'mythBulk',
+    alt: 'A tall stack of burgers beside a pile of fries',
+    myth: '“To build muscle, eat everything in sight.”',
+    truth:
+      'A modest calorie surplus with progressive training is enough. Eating far more than you need mostly adds fat, not extra muscle.',
+    source: 'bulking',
+  },
+  {
+    image: 'mythShortWorkout',
+    alt: 'A stopwatch stopped at fifteen',
+    myth: '“A workout only counts if it’s long.”',
+    truth:
+      'Short sessions add up. Ten minutes here and there across the week still counts toward your activity goal. Something beats nothing.',
+    source: 'myths',
+  },
+];
 // Illustrative single servings, not a food database. Users should check their labels.
 // Every idea has a meal of Breakfast, Lunch, Dinner, or Snack; the dashboard groups by that field.
 export const foodIdeas = [
