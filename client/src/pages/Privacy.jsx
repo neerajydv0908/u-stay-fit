@@ -71,9 +71,9 @@ export default function Privacy() {
           immediately.
         </li>
         <li>
-          Confirmation links expire after 24 hours, reset links after 1 hour, and deletion
-          confirmations after 5 minutes. Expired tokens and rate counters are removed hourly.
-          Encrypted queued email messages expire after one day.
+          Confirmation links expire after 24 hours, reset links after 1 hour, and account-deletion
+          links after 15 minutes. Expired tokens and rate counters are removed hourly. Encrypted
+          queued email messages expire after one day.
         </li>
         <li>
           Your account, plan, and records are kept until you delete them. Deletion is immediate and

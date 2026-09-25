@@ -8,6 +8,7 @@ import {
   Download,
   KeyRound,
   LogOut,
+  Mail,
   ShieldCheck,
   Smartphone,
   Trash2,
@@ -30,10 +31,9 @@ export default function Account() {
     [recoveryCodes, setRecoveryCodes] = useState(null),
     [disabling, setDisabling] = useState(false),
     [deleting, setDeleting] = useState(false),
-    [confirmation, setConfirmation] = useState(
-      new URLSearchParams(window.location.search).get('confirmation') || '',
-    ),
-    [confirmationLink, setConfirmationLink] = useState(''),
+    // Google/Facebook accounts are deleted from an emailed link (see /delete-account).
+    [deletionSentTo, setDeletionSentTo] = useState(''),
+    [deletionDevLink, setDeletionDevLink] = useState(''),
     [editing, setEditing] = useState(false);
   async function load() {
     try {
@@ -46,7 +46,6 @@ export default function Account() {
   }
   useEffect(() => {
     load();
-    if (confirmation) setDeleting(true);
     if (new URLSearchParams(window.location.search).get('error') === 'reauth_failed')
       setError('Identity confirmation failed. Try again with your linked account.');
     if (new URLSearchParams(window.location.search).get('reauth') === 'ok') {
@@ -147,6 +146,16 @@ export default function Account() {
       },
     );
   };
+  const sendDeletionLink = () =>
+    act(
+      'delete-link',
+      () => api('/account/deletion-confirmation', { method: 'POST', body: {} }),
+      (result) => {
+        setDeletionSentTo(result.email || user.email);
+        setDeletionDevLink(result.devLink || '');
+      },
+      { reload: false },
+    );
   const remove = (event) => {
     event.preventDefault();
     const body = Object.fromEntries(new FormData(event.currentTarget));
@@ -503,103 +512,87 @@ export default function Account() {
         </div>
       </Modal>
       <Modal open={deleting} onClose={() => setDeleting(false)} title="Delete this account?">
-        <form onSubmit={remove} className="form-stack">
-          <p>
-            Your plan, food, water, exercise, and weight records will be permanently deleted.
-            Download your records first if you want to keep them.
-          </p>
-          {user.hasPassword && (
-            <Field
-              label="Your password"
-              name="password"
-              type="password"
-              autoComplete="current-password"
-              required
-            />
-          )}
-          {factorField}
-          {!user.hasPassword && !account?.recentlyReauthenticated && (
-            <div className="form-stack">
-              <p>
-                For your protection, confirm through the email address on this account before
-                deleting. The confirmation lasts five minutes and works only in this signed-in
-                browser.
+        {!user.hasPassword && !account?.recentlyReauthenticated ? (
+          // No password to confirm with: the emailed link proves the mailbox belongs to you.
+          <div className="form-stack">
+            <p>
+              Your plan, food, water, exercise, and weight records will be permanently deleted.
+              Download your records first if you want to keep them.
+            </p>
+            <p>
+              This account signs in with Google or Facebook, so there is no password to confirm
+              with. We will email a one-time deletion link to <strong>{user.email}</strong>. Open it
+              on any phone or computer, type DELETE, and the account is gone. The link expires in 15
+              minutes.
+            </p>
+            {deletionSentTo && (
+              <p className="dev-link" role="status">
+                Sent to <strong>{deletionSentTo}</strong>. Check your inbox and spam folder, then
+                follow the link. If you send it again, only the newest link works. You can close
+                this window.
               </p>
-              {confirmation ? (
-                <button
-                  type="button"
-                  className="button secondary"
-                  disabled={Boolean(busy)}
-                  onClick={() =>
-                    act(
-                      'confirm',
-                      () =>
-                        api('/account/confirm-deletion', {
-                          method: 'POST',
-                          body: { token: confirmation },
-                        }),
-                      () => {
-                        setConfirmation('');
-                        window.history.replaceState(null, '', '/account');
-                        setToast('Identity confirmed. You can now delete the account.');
-                      },
-                    )
-                  }
-                >
-                  Confirm email ownership
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  className="button secondary"
-                  disabled={Boolean(busy)}
-                  onClick={() =>
-                    act(
-                      'confirm-email',
-                      () => api('/account/deletion-confirmation', { method: 'POST', body: {} }),
-                      (result) => {
-                        setConfirmationLink(result.devLink || '');
-                        setToast(
-                          'Check your email and open the confirmation link in this browser.',
-                        );
-                      },
-                    )
-                  }
-                >
-                  Send confirmation email
-                </button>
-              )}
-              {confirmationLink && (
-                <a className="text-link" href={confirmationLink}>
-                  Development: open confirmation
-                </a>
-              )}
+            )}
+            {deletionDevLink && (
+              <p className="dev-link">
+                Development mode: <a href={deletionDevLink}>open the deletion link</a>
+              </p>
+            )}
+            <ErrorMessage>{error}</ErrorMessage>
+            <div className="modal-actions">
+              <button type="button" className="button secondary" onClick={() => setDeleting(false)}>
+                Keep my account
+              </button>
+              <button
+                type="button"
+                className="button danger"
+                disabled={Boolean(busy)}
+                onClick={sendDeletionLink}
+              >
+                {busy === 'delete-link'
+                  ? 'Sending…'
+                  : deletionSentTo
+                    ? 'Send the link again'
+                    : 'Email me a deletion link'}
+                <Mail size={16} />
+              </button>
             </div>
-          )}
-          <ErrorMessage>{error}</ErrorMessage>
-          <Field
-            label="Type DELETE to confirm"
-            name="confirm"
-            placeholder="DELETE"
-            required
-            pattern="DELETE"
-            autoComplete="off"
-          />
-          <div className="modal-actions">
-            <button type="button" className="button secondary" onClick={() => setDeleting(false)}>
-              Keep my account
-            </button>
-            <button
-              className="button danger"
-              disabled={
-                busy === 'delete' || (!user.hasPassword && !account?.recentlyReauthenticated)
-              }
-            >
-              {busy === 'delete' ? 'Deleting…' : 'Delete everything'}
-              <Trash2 size={16} />
-            </button>
           </div>
-        </form>
+        ) : (
+          <form onSubmit={remove} className="form-stack">
+            <p>
+              Your plan, food, water, exercise, and weight records will be permanently deleted.
+              Download your records first if you want to keep them.
+            </p>
+            {user.hasPassword && (
+              <Field
+                label="Your password"
+                name="password"
+                type="password"
+                autoComplete="current-password"
+                required
+              />
+            )}
+            {factorField}
+            <ErrorMessage>{error}</ErrorMessage>
+            <Field
+              label="Type DELETE to confirm"
+              name="confirm"
+              placeholder="DELETE"
+              required
+              pattern="DELETE"
+              autoComplete="off"
+            />
+            <div className="modal-actions">
+              <button type="button" className="button secondary" onClick={() => setDeleting(false)}>
+                Keep my account
+              </button>
+              <button className="button danger" disabled={busy === 'delete'}>
+                {busy === 'delete' ? 'Deleting…' : 'Delete everything'}
+                <Trash2 size={16} />
+              </button>
+            </div>
+          </form>
+        )}
       </Modal>
       {toast && (
         <div className="toast" role="status">

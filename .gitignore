@@ -16,7 +16,11 @@ backups/
 .vscode/
 # Personal notes and learning material kept out of the repository
 notes/
-
+# Project write-ups kept on this computer only (not published to GitHub)
+docs/assets.md
+docs/security-hardening.md
+docs/security-review.md
+docs/testing.md
 .secrets/
 secrets/
 *.dump

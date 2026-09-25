@@ -390,6 +390,7 @@ export function createApp(
         '/verify',
         '/forgot-password',
         '/reset-password',
+        '/delete-account',
         '/account',
         '/onboarding',
         '/dashboard',

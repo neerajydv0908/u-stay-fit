@@ -11,4 +11,11 @@ export default {
   femaleGain: '/photos/femaleGain.jpg',
   maleLoss: '/photos/maleLoss.jpg',
   maleMaintain: '/photos/maleMaintain.jpg',
+  mythSkipMeals: '/photos/mythSkipMeals.jpg',
+  mythStrength: '/photos/mythStrength.jpg',
+  mythCardio: '/photos/mythCardio.jpg',
+  mythCrunches: '/photos/mythCrunches.jpg',
+  mythRest: '/photos/mythRest.jpg',
+  mythBulk: '/photos/mythBulk.jpg',
+  mythShortWorkout: '/photos/mythShortWorkout.jpg',
 };

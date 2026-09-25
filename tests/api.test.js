@@ -861,7 +861,7 @@ test('account deletion needs the password and removes every record', async () =>
     body: { confirm: 'DELETE', password: me.password },
   });
   assert.equal(gone.status, 200);
-  assert.match(lastEmail(me.email).subject, /account was deleted/);
+  assert.match(lastEmail(me.email).subject, /sad to see you go/);
   assert.equal((await request('/me', { cookie: me.cookie })).status, 401);
   for (const table of ['users', 'profiles', 'entries', 'sessions'])
     assert.equal(
@@ -1222,33 +1222,147 @@ test('concurrent submissions of the same MFA challenge can create only one sessi
   assert.deepEqual(results.map((r) => r.status).sort(), [200, 401]);
   assert.equal(results.filter((r) => r.cookie).length, 1);
 });
-test('regression F5: provider-only deletion requires a recent confirmation bound to this session', async () => {
+test('regression F5: provider-only accounts are deleted through an emailed link that works on any device', async () => {
   const me = await signUp('socialdelete');
-  const second = await post('/auth/login', { identifier: me.username, password: me.password });
   await db.query('UPDATE users SET password_hash=NULL WHERE id=$1', [me.id]);
   const remove = () =>
     request('/account', { method: 'DELETE', cookie: me.cookie, body: { confirm: 'DELETE' } });
+  // Without a password there is nothing to type, so the session alone can never delete.
   assert.equal((await remove()).status, 403);
   await db.query(
     "UPDATE sessions SET reauthenticated_at=NOW()-INTERVAL '6 minutes' WHERE user_id=$1",
     [me.id],
   );
   assert.equal((await remove()).status, 403);
+  assert.equal(
+    (await post('/account/deletion-confirmation', {})).status,
+    401,
+    'only a signed-in account can ask for the link',
+  );
   const sent = await post('/account/deletion-confirmation', {}, me.cookie);
   assert.equal(sent.status, 200);
-  const value = new URL(sent.data.devLink).searchParams.get('confirmation');
+  assert.equal(sent.data.email, me.email);
+  const mail = lastEmail(me.email);
+  assert.match(mail.subject, /Delete your U Stay Fit account/);
+  assert.match(mail.text, /any phone or computer/);
+  const token = linkToken(mail.text);
+  assert.equal(new URL(sent.data.devLink).pathname, '/delete-account');
+  assert.equal(linkToken(sent.data.devLink), token, 'dev link matches the emailed link');
+  // Opened with no session at all (a phone's mail app, another browser): it still works,
+  // but only with DELETE typed, only with the real token, and only once.
+  assert.equal((await post('/account/delete-by-email', { token })).status, 400);
+  assert.equal((await post('/account/delete-by-email', { token, confirm: 'delete' })).status, 400);
   assert.equal(
-    (await post('/account/confirm-deletion', { token: value }, second.cookie)).status,
+    (
+      await post('/account/delete-by-email', {
+        token: 'not-a-real-token-value-here',
+        confirm: 'DELETE',
+      })
+    ).status,
     400,
-    'a different session cannot confirm',
   );
-  assert.equal((await post('/account/confirm-deletion', { token: value }, me.cookie)).status, 200);
+  const other = await signUp('bystander');
+  const done = await post('/account/delete-by-email', { token, confirm: 'DELETE' }, other.cookie);
+  assert.equal(done.status, 200);
   assert.equal(
-    (await post('/account/confirm-deletion', { token: value }, me.cookie)).status,
-    400,
-    'confirmation is single-use',
+    done.headers.get('set-cookie'),
+    null,
+    'a different signed-in account stays signed in',
   );
-  assert.equal((await remove()).status, 200);
+  assert.equal((await request('/me', { cookie: other.cookie })).status, 200);
+  assert.equal((await request('/me', { cookie: me.cookie })).status, 401);
+  assert.match(lastEmail(me.email).subject, /sad to see you go/);
+  assert.equal(
+    (await db.query('SELECT count(*)::int AS n FROM users WHERE id=$1', [me.id])).rows[0].n,
+    0,
+  );
+  assert.equal(
+    (await post('/account/delete-by-email', { token, confirm: 'DELETE' })).status,
+    400,
+    'the link is single-use',
+  );
+});
+test('a deletion link expires, dies with a credential change, and never covers password accounts', async () => {
+  const me = await signUp('linkexpiry');
+  await db.query('UPDATE users SET password_hash=NULL WHERE id=$1', [me.id]);
+  const token = linkToken(
+    (await post('/account/deletion-confirmation', {}, me.cookie)).data.devLink,
+  );
+  await db.query("UPDATE email_tokens SET expires_at=NOW()-INTERVAL '1 second' WHERE user_id=$1", [
+    me.id,
+  ]);
+  assert.equal((await post('/account/delete-by-email', { token, confirm: 'DELETE' })).status, 400);
+  const fresh = linkToken(
+    (await post('/account/deletion-confirmation', {}, me.cookie)).data.devLink,
+  );
+  // "Sign out everywhere" (any credential change) cancels outstanding links.
+  await post('/auth/logout-all', {}, me.cookie);
+  assert.equal(
+    (await post('/account/delete-by-email', { token: fresh, confirm: 'DELETE' })).status,
+    400,
+  );
+  assert.equal(
+    (await db.query('SELECT count(*)::int AS n FROM users WHERE id=$1', [me.id])).rows[0].n,
+    1,
+  );
+  // Password accounts confirm with their password instead and are never sent a link.
+  const withPassword = await signUp('haspassword');
+  assert.equal((await post('/account/deletion-confirmation', {}, withPassword.cookie)).status, 400);
+  await db.query('DELETE FROM users WHERE id = ANY($1)', [[me.id, withPassword.id]]);
+});
+test('a provider-only account with a fresh provider re-authentication can still delete directly', async () => {
+  const me = await signUp('reauthdelete');
+  await db.query('UPDATE users SET password_hash=NULL WHERE id=$1', [me.id]);
+  // What the Google "?reauth=ok" callback records for this session.
+  await db.query('UPDATE sessions SET reauthenticated_at=NOW() WHERE user_id=$1', [me.id]);
+  const gone = await request('/account', {
+    method: 'DELETE',
+    cookie: me.cookie,
+    body: { confirm: 'DELETE' },
+  });
+  assert.equal(gone.status, 200);
+  assert.equal((await request('/me', { cookie: me.cookie })).status, 401);
+});
+test('the welcome email greets by name only when the name looks like a name', async () => {
+  const { messages } = await import('../server/email.js');
+  assert.equal(
+    messages.welcome('Neeraj Yadav', 'x').subject,
+    'Welcome to U Stay Fit, Neeraj Yadav!',
+  );
+  for (const name of ['Claim your prize at evil.example', 'Visit http://x.y', 'Bob 123', ''])
+    assert.equal(messages.welcome(name, 'x').subject, 'Welcome to U Stay Fit!', name);
+  assert.match(messages.welcome('Line\nBreak', 'x').text, /^Hey, Line Break!!!/);
+});
+test('the goodbye email greets by name, confirms the deletion, and invites people back', async () => {
+  const { messages } = await import('../server/email.js');
+  const goodbye = messages.accountDeleted('Neeraj Yadav', 'https://ustay-fit.com/');
+  assert.equal(goodbye.subject, "We're sad to see you go, Neeraj Yadav!");
+  assert.match(goodbye.text, /^Dear Neeraj Yadav,\n\nWe are so sad to see you go!!/);
+  assert.match(goodbye.text, /permanently deleted/);
+  assert.match(goodbye.text, /whenever you are ready to start your health journey again/i);
+  assert.match(goodbye.text, /https:\/\/ustay-fit\.com\//);
+  assert.match(goodbye.text, /ustayfit0916@gmail\.com/);
+  const odd = messages.accountDeleted('Visit http://x.y', 'x');
+  assert.equal(odd.subject, "We're sad to see you go!");
+  assert.match(odd.text, /^Dear friend,/);
+});
+test('a confirmed sign-up gets one warm welcome email by name', async () => {
+  const me = await signUp('welcomed');
+  const welcomes = outbox.filter(
+    (m) => m.to === me.email && /^Welcome to U Stay Fit/.test(m.subject),
+  );
+  assert.equal(welcomes.length, 1);
+  assert.equal(welcomes[0].subject, `Welcome to U Stay Fit, ${me.name}!`);
+  assert.match(welcomes[0].text, new RegExp(`^Hey, ${me.name}!!!`));
+  assert.match(welcomes[0].text, /glad you trusted us to be a part of your health journey/);
+  assert.match(welcomes[0].text, /\/dashboard/);
+  // Signing in again later does not send another one.
+  await post('/auth/login', { identifier: me.username, password: me.password });
+  assert.equal(
+    outbox.filter((m) => m.to === me.email && /^Welcome to U Stay Fit/.test(m.subject)).length,
+    1,
+  );
+  await db.query('DELETE FROM users WHERE id = $1', [me.id]);
 });
 test('the security log contains event types and pseudonymous subjects, without credentials or health records', async () => {
   const events = (await db.query('SELECT * FROM security_events')).rows;
@@ -1261,6 +1375,9 @@ test('the security log contains event types and pseudonymous subjects, without c
 });
 
 test('provider callbacks bind state to the browser, are single-use, and never merge by email', async () => {
+  const providerMail = [];
+  const welcomes = () =>
+    providerMail.filter((m) => m.to === identity.email && /^Welcome to U Stay Fit/.test(m.subject));
   let identity = {
     subject: `provider_${unique}`,
     email: `provider_${unique}@example.com`,
@@ -1272,7 +1389,7 @@ test('provider callbacks bind state to the browser, are single-use, and never me
     rateLimitMax: 1000,
     apiLimit: 5000,
     appSecret: 'provider-routing-test-secret-with-32-characters',
-    mailer: { mode: 'console (test)', send: async () => {} },
+    mailer: { mode: 'console (test)', send: async (message) => void providerMail.push(message) },
     isBreached: async () => false,
     oauthClient: {
       configured: () => true,
@@ -1313,6 +1430,17 @@ test('provider callbacks bind state to the browser, are single-use, and never me
       .find((c) => c.startsWith('usf_session='))
       .split(';')[0];
     assert.equal((await (await get('/api/me', session)).json()).user.hasPassword, false);
+    // The first Google sign-in creates the account, so it is welcomed by name, once.
+    assert.equal(welcomes().length, 1);
+    assert.match(welcomes()[0].text, /^Hey, Provider Test!!!/);
+    const returning = await start();
+    assert.equal(
+      (
+        await get(`/api/auth/google/callback?state=${returning.state}&code=test`, returning.cookie)
+      ).headers.get('location'),
+      '/onboarding',
+    );
+    assert.equal(welcomes().length, 1, 'signing in again sends no second welcome');
     assert.equal(
       (
         await get(`/api/auth/google/callback?state=${first.state}&code=test`, first.cookie)

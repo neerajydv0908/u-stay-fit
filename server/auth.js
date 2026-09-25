@@ -60,6 +60,13 @@ export function registerAuthRoutes(app, ctx) {
     await mail.queue(tx, { to: user.email, ...messages.verify(url) }, user.id);
     return devLinks ? url : undefined;
   }
+  // One warm welcome per account, sent when the account becomes real (see messages.welcome).
+  const welcome = (tx, user) =>
+    mail.queue(
+      tx,
+      { to: user.email, ...messages.welcome(user.name, `${origin}/dashboard`) },
+      user.id,
+    );
   // Include the same minimum response time for known and unknown email addresses;
   // remote email delivery runs independently of the request in production.
   const emailDelay = () => {
@@ -142,6 +149,7 @@ export function registerAuthRoutes(app, ctx) {
       await tx.query('UPDATE users SET email_verified_at=NOW() WHERE id=$1', [user.id]);
       user.email_verified_at = new Date();
       await state.audit(tx, 'email_verified', user.id);
+      await welcome(tx, user);
       return signedIn(tx, user, req.cookies[SESSION_COOKIE]);
     });
     return reply(res, result);
@@ -370,6 +378,8 @@ export function registerAuthRoutes(app, ctx) {
       );
       await tx.query('DELETE FROM request_limits WHERE key=$1', [state.opaque(`login:${user.id}`)]);
       await mail.queue(tx, { to: user.email, ...messages.passwordChanged() }, user.id);
+      // The reset link also proves the mailbox, so a never-confirmed sign-up becomes real here.
+      if (!user.email_verified_at) await welcome(tx, user);
       await state.audit(tx, 'password_reset', user.id);
       // Proving mailbox ownership never bypasses the configured second factor.
       return { body: { ok: true, signInRequired: true } };
@@ -532,6 +542,7 @@ export function registerAuthRoutes(app, ctx) {
             'INSERT INTO oauth_identities(provider,subject,user_id) VALUES ($1,$2,$3)',
             [provider, info.subject, user.id],
           );
+          await welcome(tx, user);
         }
         // Local TOTP, if present, cannot be bypassed through an additional provider identity.
         if (user.totp_enabled_at) return { redirect: '/login?error=use_original_login' };
@@ -541,6 +552,7 @@ export function registerAuthRoutes(app, ctx) {
           redirect: (await getProfile(user.id, tx)) ? '/dashboard' : '/onboarding',
         };
       });
+      await mail.finish();
       if (result.session) attachSession(res, result.session);
       res.redirect(result.redirect);
     } catch {

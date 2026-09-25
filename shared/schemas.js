@@ -67,6 +67,11 @@ export const deleteAccountSchema = z.object({
   code: z.string().trim().max(20).optional(),
   confirm: z.literal('DELETE', { error: 'Type DELETE to confirm.' }),
 });
+// The emailed deletion link: the token proves mailbox ownership, DELETE proves intent.
+export const deleteByEmailSchema = z.object({
+  token: tokenSchema,
+  confirm: z.literal('DELETE', { error: 'Type DELETE to confirm.' }),
+});
 export const profileSchema = z
   .object({
     gender: z.enum(['female', 'male']),

@@ -1,4 +1,4 @@
-# New installations only. Read docs/security-hardening.md before upgrading an existing volume.
+# New installations only: the database role setup below runs only on an empty volume.
 x-database: &database
   NODE_ENV: production
   DATABASE_SSL: "false"
