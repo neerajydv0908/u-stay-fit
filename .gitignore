@@ -21,6 +21,9 @@ docs/assets.md
 docs/security-hardening.md
 docs/security-review.md
 docs/testing.md
+docs/deployment.md
+docs/predeployment-validation.md
+docs/security-checklist.md
 .secrets/
 secrets/
 *.dump
