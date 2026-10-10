@@ -17,11 +17,12 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      # Build first: the production tests serve the built site from dist/
+      - run: npm run build
       - run: npm test
       - name: Test restricted roles and API security on native PostgreSQL 17
         run: npm run test:postgres
       - run: npm audit --audit-level=low
-      - run: npm run build
       - name: Scan repository history and built files for secrets (redacted)
         shell: bash
         run: |
